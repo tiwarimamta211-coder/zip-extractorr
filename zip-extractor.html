@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZipForge — File Extractor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Barlow+Condensed:wght@300;400;500;600;700;800&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0b0d;
+    --surface: #111318;
+    --surface2: #181c23;
+    --surface3: #1e2330;
+    --border: #252b38;
+    --border2: #2e3547;
+    --accent: #f0a500;
+    --accent2: #e07b00;
+    --accent-dim: rgba(240,165,0,0.12);
+    --accent-glow: rgba(240,165,0,0.25);
+    --text: #e8eaf0;
+    --text2: #9aa3b8;
+    --text3: #5c6478;
+    --green: #3dd68c;
+    --green-dim: rgba(61,214,140,0.12);
+    --red: #f0504a;
+    --red-dim: rgba(240,80,74,0.12);
+    --blue: #4a9eff;
+    --blue-dim: rgba(74,158,255,0.1);
+    --radius: 6px;
+    --mono: 'Space Mono', monospace;
+    --display: 'Barlow Condensed', sans-serif;
+    --body: 'Barlow', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: -40%;
+    right: -20%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(240,165,0,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-icon {
+    width: 42px;
+    height: 42px;
+    background: var(--accent);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--bg);
+    font-weight: 700;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .logo-icon::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 60%);
+  }
+
+  .logo-text {
+    font-family: var(--display);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .logo-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  .header-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    border: 1px solid var(--border2);
+    padding: 5px 10px;
+    border-radius: 3px;
+    text-transform: uppercase;
+  }
+
+  /* ── Drop Zone ── */
+  .drop-zone {
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 52px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--accent-dim) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--surface2);
+  }
+
+  .drop-zone:hover::before, .drop-zone.drag-over::before { opacity: 1; }
+
+  .drop-zone.drag-over {
+    transform: scale(1.005);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 40px var(--accent-glow);
+  }
+
+  .drop-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    display: block;
+    filter: grayscale(0.3);
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+
+  .drop-title {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .drop-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+  }
+
+  .browse-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: var(--bg);
+    font-family: var(--display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 11px 24px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    z-index: 1;
+  }
+
+  .browse-btn:hover {
+    background: var(--accent2);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px var(--accent-glow);
+  }
+
+  #fileInput { display: none; }
+
+  /* ── Stats Bar ── */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.35s ease;
+  }
+
+  .stats-bar.visible { opacity: 1; transform: translateY(0); }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transition: transform 0.4s ease;
+    transform-origin: left;
+  }
+
+  .stat-card.loaded::before { transform: scaleX(1); }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.5px;
+  }
+
+  .stat-value.accent { color: var(--accent); }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-left { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap; }
+  .toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text3);
+    font-size: 13px;
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 9px 12px 9px 34px;
+    border-radius: var(--radius);
+    outline: none;
+    transition: border-color 0.2s;
+    letter-spacing: 0.5px;
+  }
+
+  .search-input::placeholder { color: var(--text3); }
+  .search-input:focus { border-color: var(--accent); }
+
+  .filter-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    outline: none;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: border-color 0.2s;
+  }
+
+  .filter-select:focus { border-color: var(--accent); }
+
+  .sort-btn, .view-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 9px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .sort-btn:hover, .view-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .sort-btn.active, .view-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border-radius: var(--radius);
+    font-family: var(--display);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .btn-primary:hover { background: var(--accent2); box-shadow: 0 4px 16px var(--accent-glow); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+
+  .btn-ghost:hover { border-color: var(--border2); color: var(--text); }
+  .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-danger {
+    background: var(--red-dim);
+    color: var(--red);
+    border: 1px solid rgba(240,80,74,0.25);
+  }
+
+  .btn-danger:hover { background: rgba(240,80,74,0.2); }
+
+  /* ── File Tree ── */
+  .file-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: none;
+  }
+
+  .file-panel.visible { display: block; }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .select-all-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .custom-cb {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--border2);
+    border-radius: 2px;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .custom-cb.checked { background: var(--accent); border-color: var(--accent); }
+  .custom-cb.indeterminate { background: var(--accent-dim); border-color: var(--accent); }
+
+  .cb-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+
+  /* Column headers */
+  .col-header {
+    display: grid;
+    grid-template-columns: 24px 1fr 90px 110px 80px;
+    gap: 0;
+    padding: 8px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .col-head {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.15s;
+  }
+
+  .col-head:hover { color: var(--accent); }
+
+  .file-list {
+    max-height: 420px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+
+  .file-list::-webkit-scrollbar { width: 4px; }
+  .file-list::-webkit-scrollbar-track { background: transparent; }
+  .file-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* File row */
+  .file-row {
+    display: grid;
+    grid-template-columns: 24px 1fr 90px 110px 80px;
+    gap: 0;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(37,43,56,0.6);
+    align-items: center;
+    transition: background 0.15s;
+    cursor: default;
+    animation: rowIn 0.25s ease both;
+  }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .file-row:last-child { border-bottom: none; }
+  .file-row:hover { background: var(--surface2); }
+  .file-row.selected { background: var(--accent-dim); }
+  .file-row.folder-row { cursor: pointer; }
+
+  .row-cb { display: flex; align-items: center; cursor: pointer; }
+
+  .file-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    padding-right: 12px;
+  }
+
+  .file-icon { font-size: 15px; flex-shrink: 0; }
+
+  .file-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.3px;
+  }
+
+  .file-path {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .file-type-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .file-size {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    text-align: right;
+    padding-right: 12px;
+  }
+
+  .file-compress {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    text-align: right;
+  }
+
+  .compress-bar-wrap {
+    margin-top: 3px;
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .compress-bar {
+    height: 100%;
+    background: var(--green);
+    border-radius: 1px;
+    transition: width 0.5s ease;
+  }
+
+  /* Folder indent */
+  .indent-1 { padding-left: 32px !important; }
+  .indent-2 { padding-left: 48px !important; }
+  .indent-3 { padding-left: 64px !important; }
+
+  .folder-toggle { transition: transform 0.2s; display: inline-block; }
+  .folder-toggle.collapsed { transform: rotate(-90deg); }
+
+  /* ── Progress ── */
+  .progress-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-top: 20px;
+    display: none;
+  }
+
+  .progress-panel.visible { display: block; }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .progress-title {
+    font-family: var(--display);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .progress-pct {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+  }
+
+  .progress-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    width: 0%;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+  }
+
+  .progress-file {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Log ── */
+  .log-panel {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-top: 16px;
+    overflow: hidden;
+    display: none;
+  }
+
+  .log-panel.visible { display: block; }
+
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .log-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .log-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  .log-clear {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    background: none;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+
+  .log-clear:hover { color: var(--red); }
+
+  .log-body {
+    height: 140px;
+    overflow-y: auto;
+    padding: 12px 14px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+
+  .log-entry {
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    display: flex;
+    gap: 10px;
+  }
+
+  .log-time { color: var(--text3); flex-shrink: 0; }
+  .log-msg { flex: 1; }
+  .log-msg.ok { color: var(--green); }
+  .log-msg.err { color: var(--red); }
+  .log-msg.info { color: var(--text2); }
+  .log-msg.warn { color: var(--accent); }
+
+  /* ── Bottom actions ── */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+
+  .bottom-bar.visible { display: flex; }
+
+  .selected-count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 1px;
+  }
+
+  .selected-count span { color: var(--accent); font-weight: 700; }
+
+  /* ── Preview Modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    width: 90%;
+    max-width: 640px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transform: scale(0.95) translateY(10px);
+    transition: transform 0.2s;
+  }
+
+  .modal-overlay.open .modal { transform: scale(1) translateY(0); }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .modal-title {
+    font-family: var(--display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text3);
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+
+  .modal-close:hover { color: var(--red); }
+
+  .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+
+  .preview-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text2);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .preview-image {
+    max-width: 100%;
+    border-radius: var(--radius);
+    display: block;
+    margin: 0 auto;
+  }
+
+  .preview-binary {
+    text-align: center;
+    padding: 40px;
+    color: var(--text3);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .preview-binary .big-icon { font-size: 52px; margin-bottom: 16px; display: block; }
+
+  /* ── Toast ── */
+  .toast-area {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 2000;
+  }
+
+  .toast {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    animation: toastIn 0.3s ease;
+    min-width: 240px;
+    max-width: 340px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .toast.fade-out { animation: toastOut 0.3s ease forwards; }
+
+  @keyframes toastOut {
+    to { opacity: 0; transform: translateX(20px); }
+  }
+
+  .toast-icon { font-size: 16px; flex-shrink: 0; }
+  .toast-text { flex: 1; line-height: 1.4; letter-spacing: 0.3px; }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 52px 24px;
+    color: var(--text3);
+  }
+
+  .empty-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
+
+  .empty-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── File type colors ── */
+  .type-img { background: rgba(74,158,255,0.12); color: var(--blue); }
+  .type-doc { background: rgba(61,214,140,0.12); color: var(--green); }
+  .type-archive { background: rgba(240,165,0,0.12); color: var(--accent); }
+  .type-code { background: rgba(180,80,255,0.12); color: #c084fc; }
+  .type-media { background: rgba(255,100,100,0.12); color: #f87171; }
+  .type-data { background: rgba(80,200,180,0.12); color: #34d399; }
+  .type-other { background: var(--surface3); color: var(--text3); }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .stats-bar { grid-template-columns: repeat(2, 1fr); }
+    .col-header { grid-template-columns: 24px 1fr 70px 0 0; }
+    .col-header .col-head:nth-child(4),
+    .col-header .col-head:nth-child(5) { display: none; }
+    .file-row { grid-template-columns: 24px 1fr 70px 0 0; }
+    .file-row > :nth-child(4),
+    .file-row > :nth-child(5) { display: none; }
+    .toolbar { flex-direction: column; align-items: stretch; }
+    .toolbar-left, .toolbar-right { width: 100%; }
+    header { flex-direction: column; gap: 14px; align-items: flex-start; }
+    .drop-zone { padding: 36px 16px; }
+  }
+
+  @media (max-width: 420px) {
+    .stats-bar { grid-template-columns: 1fr 1fr; }
+    .bottom-bar { flex-direction: column; align-items: stretch; }
+    .bottom-bar .action-btn { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⬡</div>
+      <div>
+        <div class="logo-text">ZipForge</div>
+        <div class="logo-sub">File Extractor</div>
+      </div>
+    </div>
+    <div class="header-badge">v2.0 // Client-Side</div>
+  </header>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">🗜️</span>
+    <div class="drop-title">Drop Your ZIP Here</div>
+    <div class="drop-sub">or click to browse files</div>
+    <button class="browse-btn" onclick="document.getElementById('fileInput').click()">
+      📂 Browse Files
+    </button>
+    <input type="file" id="fileInput" accept=".zip,.jar,.apk,.docx,.xlsx,.pptx,.odt,.epub">
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card" id="sc1">
+      <div class="stat-label">Total Files</div>
+      <div class="stat-value" id="statFiles">—</div>
+    </div>
+    <div class="stat-card" id="sc2">
+      <div class="stat-label">Compressed</div>
+      <div class="stat-value" id="statCompressed">—</div>
+    </div>
+    <div class="stat-card" id="sc3">
+      <div class="stat-label">Uncompressed</div>
+      <div class="stat-value" id="statUncompressed">—</div>
+    </div>
+    <div class="stat-card" id="sc4">
+      <div class="stat-label">Ratio</div>
+      <div class="stat-value accent" id="statRatio">—</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar" style="display:none">
+    <div class="toolbar-left">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input class="search-input" type="text" id="searchInput" placeholder="Search files...">
+      </div>
+      <select class="filter-select" id="filterType">
+        <option value="all">All Types</option>
+        <option value="image">Images</option>
+        <option value="document">Documents</option>
+        <option value="code">Code</option>
+        <option value="archive">Archives</option>
+        <option value="media">Media</option>
+        <option value="data">Data</option>
+        <option value="folder">Folders</option>
+      </select>
+      <button class="sort-btn" id="sortBtn" onclick="toggleSort()">↕ Name</button>
+    </div>
+    <div class="toolbar-right">
+      <button class="view-btn active" id="viewFlat" onclick="setView('flat')">≡ Flat</button>
+      <button class="view-btn" id="viewTree" onclick="setView('tree')">⊞ Tree</button>
+    </div>
+  </div>
+
+  <!-- File Panel -->
+  <div class="file-panel" id="filePanel">
+    <div class="panel-header">
+      <div class="panel-title" id="panelTitle">FILES</div>
+      <div class="select-all-wrap" onclick="toggleSelectAll()">
+        <div class="custom-cb" id="selectAllCb"></div>
+        <span class="cb-label">SELECT ALL</span>
+      </div>
+    </div>
+    <div class="col-header">
+      <div></div>
+      <div class="col-head" onclick="sortBy('name')">Name ↕</div>
+      <div class="col-head" style="text-align:right;padding-right:12px;" onclick="sortBy('size')">Size ↕</div>
+      <div class="col-head" onclick="sortBy('type')">Type ↕</div>
+      <div class="col-head" onclick="sortBy('ratio')">Ratio ↕</div>
+    </div>
+    <div class="file-list" id="fileList"></div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-panel" id="progressPanel">
+    <div class="progress-label">
+      <div class="progress-title">Extracting Files</div>
+      <div class="progress-pct" id="progressPct">0%</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-file" id="progressFile">Preparing...</div>
+  </div>
+
+  <!-- Log -->
+  <div class="log-panel" id="logPanel">
+    <div class="log-header">
+      <div class="log-title">
+        <div class="log-dot"></div>
+        OPERATION LOG
+      </div>
+      <button class="log-clear" onclick="clearLog()">CLEAR</button>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar" id="bottomBar">
+    <div class="selected-count" id="selectedCount"><span>0</span> files selected</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="action-btn btn-ghost" onclick="resetAll()">↺ Reset</button>
+      <button class="action-btn btn-ghost" id="previewBtn" onclick="previewSelected()" disabled>👁 Preview</button>
+      <button class="action-btn btn-primary" id="extractBtn" onclick="extractSelected()" disabled>⬇ Extract Selected</button>
+      <button class="action-btn btn-primary" id="extractAllBtn" onclick="extractAll()">⬇ Extract All</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">Preview</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-area" id="toastArea"></div>
+
+<script>
+/* ── State ── */
+let zip = null;
+let allEntries = [];        // { name, path, isDir, size, compSize, entry }
+let filteredEntries = [];
+let selectedPaths = new Set();
+let sortField = 'name';
+let sortAsc = true;
+let viewMode = 'flat';       // 'flat' | 'tree'
+let folderCollapsed = new Set();
+let currentFilter = 'all';
+let currentSearch = '';
+
+/* ── Extension Maps ── */
+const EXT_TYPE = {
+  // images
+  png:'image',jpg:'image',jpeg:'image',gif:'image',webp:'image',svg:'image',ico:'image',bmp:'image',tiff:'image',
+  // docs
+  pdf:'document',doc:'document',docx:'document',odt:'document',txt:'document',rtf:'document',md:'document',epub:'document',
+  // code
+  js:'code',ts:'code',jsx:'code',tsx:'code',html:'code',css:'code',scss:'code',py:'code',java:'code',
+  cpp:'code',c:'code',cs:'code',php:'code',rb:'code',go:'code',rs:'code',swift:'code',kt:'code',json:'code',
+  xml:'code',yaml:'code',yml:'code',sh:'code',bat:'code',toml:'code',ini:'code',cfg:'code',
+  // archive
+  zip:'archive',rar:'archive',tar:'archive',gz:'archive',bz2:'archive','7z':'archive',jar:'archive',
+  // media
+  mp4:'media',mp3:'media',wav:'media',avi:'media',mov:'media',mkv:'media',flac:'media',ogg:'media',
+  // data
+  csv:'data',xls:'data',xlsx:'data',db:'data',sql:'data',sqlite:'data',ppt:'data',pptx:'data',
+};
+
+const TYPE_ICON = {
+  image:'🖼️', document:'📄', code:'💻', archive:'🗜️', media:'🎬', data:'📊', folder:'📁', other:'📎'
+};
+
+const TYPE_CLASS = {
+  image:'type-img', document:'type-doc', code:'type-code', archive:'type-archive',
+  media:'type-media', data:'type-data', folder:'type-other', other:'type-other'
+};
+
+function getType(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  return EXT_TYPE[ext] || 'other';
+}
+
+/* ── Drop Zone ── */
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+dropZone.addEventListener('click', e => {
+  if (e.target.closest('.browse-btn') || e.target === fileInput) return;
+  fileInput.click();
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+/* ── Load File ── */
+async function loadFile(file) {
+  log('info', `Loading: ${file.name} (${fmtSize(file.size)})`);
+  try {
+    zip = await JSZip.loadAsync(file);
+    allEntries = [];
+    selectedPaths.clear();
+
+    zip.forEach((relativePath, entry) => {
+      allEntries.push({
+        path: relativePath,
+        name: relativePath.split('/').filter(Boolean).pop() || relativePath,
+        isDir: entry.dir,
+        size: entry._data ? (entry._data.uncompressedSize || 0) : 0,
+        compSize: entry._data ? (entry._data.compressedSize || 0) : 0,
+        entry,
+      });
+    });
+
+    // Compute stats
+    const files = allEntries.filter(e => !e.isDir);
+    const totalUncomp = files.reduce((a, e) => a + e.size, 0);
+    const totalComp = files.reduce((a, e) => a + e.compSize, 0);
+    const ratio = totalUncomp > 0 ? Math.round((1 - totalComp / totalUncomp) * 100) : 0;
+
+    document.getElementById('statFiles').textContent = files.length;
+    document.getElementById('statCompressed').textContent = fmtSize(totalComp);
+    document.getElementById('statUncompressed').textContent = fmtSize(totalUncomp);
+    document.getElementById('statRatio').textContent = `${ratio}%`;
+
+    // Animate stats
+    const statsBar = document.getElementById('statsBar');
+    statsBar.classList.add('visible');
+    document.querySelectorAll('.stat-card').forEach((c, i) => {
+      setTimeout(() => c.classList.add('loaded'), i * 80);
+    });
+
+    document.getElementById('toolbar').style.display = 'flex';
+    document.getElementById('filePanel').classList.add('visible');
+    document.getElementById('bottomBar').classList.add('visible');
+    document.getElementById('logPanel').classList.add('visible');
+
+    renderList();
+    log('ok', `Loaded ${files.length} files, ${allEntries.filter(e => e.isDir).length} folders`);
+    toast('✅', `ZIP loaded: ${files.length} files`);
+  } catch (err) {
+    log('err', `Failed to load file: ${err.message}`);
+    toast('❌', 'Invalid or corrupted ZIP file');
+  }
+}
+
+/* ── Render ── */
+function renderList() {
+  const list = document.getElementById('fileList');
+  let entries = [...allEntries];
+
+  // Filter type
+  if (currentFilter !== 'all') {
+    entries = entries.filter(e => {
+      if (currentFilter === 'folder') return e.isDir;
+      if (e.isDir) return false;
+      return getType(e.name) === currentFilter;
+    });
+  }
+
+  // Filter search
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    entries = entries.filter(e => e.path.toLowerCase().includes(q));
+  }
+
+  // Sort
+  entries.sort((a, b) => {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    let av, bv;
+    if (sortField === 'name') { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+    else if (sortField === 'size') { av = a.size; bv = b.size; }
+    else if (sortField === 'type') { av = getType(a.name); bv = getType(b.name); }
+    else if (sortField === 'ratio') {
+      av = a.size > 0 ? a.compSize / a.size : 1;
+      bv = b.size > 0 ? b.compSize / b.size : 1;
+    }
+    if (av < bv) return sortAsc ? -1 : 1;
+    if (av > bv) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  filteredEntries = entries;
+  updatePanelTitle(entries.length);
+  updateSelectAllState();
+
+  if (entries.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">No files match your filter</div></div>`;
+    return;
+  }
+
+  list.innerHTML = entries.map((e, i) => buildRow(e, i)).join('');
+  updateExtractBtns();
+}
+
+function buildRow(e, i) {
+  const type = e.isDir ? 'folder' : getType(e.name);
+  const icon = TYPE_ICON[type];
+  const badgeClass = TYPE_CLASS[type];
+  const isSelected = selectedPaths.has(e.path);
+
+  const compRatio = (!e.isDir && e.size > 0) ? Math.round((1 - e.compSize / e.size) * 100) : 0;
+  const depth = (e.path.match(/\//g) || []).length - (e.isDir ? 1 : 0);
+  const indentClass = depth > 0 ? `indent-${Math.min(depth, 3)}` : '';
+
+  const sizeCell = e.isDir ? `<span style="color:var(--text3)">—</span>` :
+    `<span>${fmtSize(e.size)}</span>`;
+
+  const ratioCell = e.isDir ? '' : `
+    <span>${compRatio}%</span>
+    <div class="compress-bar-wrap"><div class="compress-bar" style="width:${compRatio}%"></div></div>
+  `;
+
+  const typeLabel = e.isDir ? 'DIR' : (e.name.split('.').pop().substring(0, 5).toUpperCase() || '?');
+
+  const cbChecked = isSelected ? 'checked' : '';
+
+  return `
+    <div class="file-row ${isSelected ? 'selected' : ''} ${e.isDir ? 'folder-row' : ''} ${indentClass}"
+         data-path="${escHtml(e.path)}"
+         style="animation-delay:${i * 0.015}s"
+         onclick="rowClick(event, '${escHtml(e.path)}')">
+      <div class="row-cb">
+        <div class="custom-cb ${cbChecked}" onclick="toggleSelect(event, '${escHtml(e.path)}')">
+          ${isSelected ? '✓' : ''}
+        </div>
+      </div>
+      <div class="file-name-cell">
+        <span class="file-icon">${icon}</span>
+        <div style="min-width:0">
+          <div class="file-name">${escHtml(e.name)}</div>
+          ${depth > 0 ? `<span class="file-path">${escHtml(e.path)}</span>` : ''}
+        </div>
+      </div>
+      <div class="file-size">${sizeCell}</div>
+      <div>
+        <span class="file-type-badge ${badgeClass}">${typeLabel}</span>
+      </div>
+      <div class="file-compress">${ratioCell}</div>
+    </div>`;
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ── Selection ── */
+function rowClick(ev, path) {
+  if (ev.target.closest('.row-cb')) return;
+  const entry = allEntries.find(e => e.path === path);
+  if (!entry || entry.isDir) return;
+  toggleSelect(ev, path);
+}
+
+function toggleSelect(ev, path) {
+  ev.stopPropagation();
+  if (selectedPaths.has(path)) {
+    selectedPaths.delete(path);
+  } else {
+    selectedPaths.add(path);
+  }
+  // Re-render just this row for perf
+  const row = document.querySelector(`[data-path="${CSS.escape(path)}"]`);
+  if (row) {
+    const cb = row.querySelector('.custom-cb');
+    if (selectedPaths.has(path)) {
+      row.classList.add('selected');
+      cb.classList.add('checked');
+      cb.textContent = '✓';
+    } else {
+      row.classList.remove('selected');
+      cb.classList.remove('checked');
+      cb.textContent = '';
+    }
+  }
+  updateSelectAllState();
+  updateExtractBtns();
+}
+
+function toggleSelectAll() {
+  const files = filteredEntries.filter(e => !e.isDir);
+  const allSelected = files.every(e => selectedPaths.has(e.path));
+  if (allSelected) {
+    files.forEach(e => selectedPaths.delete(e.path));
+  } else {
+    files.forEach(e => selectedPaths.add(e.path));
+  }
+  renderList();
+}
+
+function updateSelectAllState() {
+  const cb = document.getElementById('selectAllCb');
+  const files = filteredEntries.filter(e => !e.isDir);
+  const selCount = files.filter(e => selectedPaths.has(e.path)).length;
+  cb.classList.remove('checked', 'indeterminate');
+  cb.textContent = '';
+  if (selCount === 0) { /* empty */ }
+  else if (selCount === files.length) { cb.classList.add('checked'); cb.textContent = '✓'; }
+  else { cb.classList.add('indeterminate'); cb.textContent = '—'; }
+
+  const selEl = document.getElementById('selectedCount');
+  selEl.innerHTML = `<span>${selCount}</span> files selected`;
+}
+
+function updateExtractBtns() {
+  const sel = selectedPaths.size;
+  document.getElementById('extractBtn').disabled = sel === 0;
+  document.getElementById('previewBtn').disabled = sel !== 1 || (sel === 1 && isSelectedDir());
+}
+
+function isSelectedDir() {
+  if (selectedPaths.size !== 1) return false;
+  const path = [...selectedPaths][0];
+  const e = allEntries.find(x => x.path === path);
+  return e && e.isDir;
+}
+
+/* ── Sorting / Filtering ── */
+function sortBy(field) {
+  if (sortField === field) sortAsc = !sortAsc;
+  else { sortField = field; sortAsc = true; }
+  document.getElementById('sortBtn').textContent = `↕ ${field.charAt(0).toUpperCase() + field.slice(1)}`;
+  renderList();
+}
+
+function toggleSort() {
+  sortAsc = !sortAsc;
+  renderList();
+}
+
+function setView(mode) {
+  viewMode = mode;
+  document.getElementById('viewFlat').classList.toggle('active', mode === 'flat');
+  document.getElementById('viewTree').classList.toggle('active', mode === 'tree');
+  renderList();
+}
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  currentSearch = e.target.value.trim();
+  renderList();
+});
+
+document.getElementById('filterType').addEventListener('change', e => {
+  currentFilter = e.target.value;
+  renderList();
+});
+
+/* ── Panel Title ── */
+function updatePanelTitle(count) {
+  document.getElementById('panelTitle').textContent = `FILES — ${count} ITEMS`;
+}
+
+/* ── Extract ── */
+async function extractSelected() {
+  const toExtract = allEntries.filter(e => selectedPaths.has(e.path) && !e.isDir);
+  if (toExtract.length === 0) return;
+  await doExtract(toExtract);
+}
+
+async function extractAll() {
+  const toExtract = allEntries.filter(e => !e.isDir);
+  if (toExtract.length === 0) return;
+  await doExtract(toExtract);
+}
+
+async function doExtract(entries) {
+  const panel = document.getElementById('progressPanel');
+  panel.classList.add('visible');
+  const fill = document.getElementById('progressFill');
+  const pct = document.getElementById('progressPct');
+  const pfile = document.getElementById('progressFile');
+
+  log('info', `Starting extraction of ${entries.length} file(s)...`);
+
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const progress = Math.round(((i + 1) / entries.length) * 100);
+
+    fill.style.width = `${progress}%`;
+    pct.textContent = `${progress}%`;
+    pfile.textContent = e.path;
+
+    try {
+      const blob = await e.entry.async('blob');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = e.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      log('ok', `✔ ${e.path}`);
+      await sleep(entries.length > 10 ? 80 : 20);
+    } catch (err) {
+      log('err', `✘ ${e.path} — ${err.message}`);
+    }
+  }
+
+  setTimeout(() => {
+    panel.classList.remove('visible');
+    fill.style.width = '0%';
+    pct.textContent = '0%';
+  }, 1500);
+
+  toast('✅', `Extracted ${entries.length} file(s)`);
+  log('ok', `Extraction complete. ${entries.length} file(s) saved.`);
+}
+
+/* ── Preview ── */
+async function previewSelected() {
+  if (selectedPaths.size !== 1) return;
+  const path = [...selectedPaths][0];
+  const entry = allEntries.find(e => e.path === path);
+  if (!entry || entry.isDir) return;
+
+  const modal = document.getElementById('previewModal');
+  const body = document.getElementById('modalBody');
+  const title = document.getElementById('modalTitle');
+
+  title.textContent = entry.name;
+  body.innerHTML = `<div style="text-align:center;padding:40px;font-family:var(--mono);color:var(--text3)">Loading preview...</div>`;
+  modal.classList.add('open');
+
+  const type = getType(entry.name);
+  const blob = await entry.entry.async('blob');
+
+  if (type === 'image') {
+    const url = URL.createObjectURL(blob);
+    body.innerHTML = `<img class="preview-image" src="${url}" alt="${escHtml(entry.name)}">`;
+  } else if (type === 'code' || type === 'document' || entry.name.endsWith('.txt') || entry.name.endsWith('.md')) {
+    const text = await entry.entry.async('string');
+    const lines = text.split('\n').length;
+    body.innerHTML = `
+      <div style="margin-bottom:12px;font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:1px">${lines} LINES — ${fmtSize(entry.size)}</div>
+      <pre class="preview-text">${escHtml(text.substring(0, 8000))}${text.length > 8000 ? '\n\n... [truncated]' : ''}</pre>`;
+  } else {
+    body.innerHTML = `
+      <div class="preview-binary">
+        <span class="big-icon">${TYPE_ICON[type] || '📎'}</span>
+        <div style="font-size:14px;color:var(--text2);margin-bottom:8px">${escHtml(entry.name)}</div>
+        <div style="margin-bottom:16px">Binary file — ${fmtSize(entry.size)}</div>
+        <button class="action-btn btn-primary" onclick="downloadFromPreview()">⬇ Download File</button>
+      </div>`;
+  }
+}
+
+async function downloadFromPreview() {
+  closeModal();
+  await extractSelected();
+}
+
+function closeModal() {
+  document.getElementById('previewModal').classList.remove('open');
+}
+
+document.getElementById('previewModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('previewModal')) closeModal();
+});
+
+/* ── Log ── */
+function log(type, msg) {
+  const body = document.getElementById('logBody');
+  const now = new Date();
+  const time = now.toTimeString().substring(0, 8);
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${time}</span><span class="log-msg ${type}">${escHtml(msg)}</span>`;
+  body.appendChild(entry);
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logBody').innerHTML = '';
+}
+
+/* ── Toast ── */
+function toast(icon, msg) {
+  const area = document.getElementById('toastArea');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${escHtml(msg)}</span>`;
+  area.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('fade-out');
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
+}
+
+/* ── Reset ── */
+function resetAll() {
+  zip = null;
+  allEntries = [];
+  filteredEntries = [];
+  selectedPaths.clear();
+  sortField = 'name';
+  sortAsc = true;
+  viewMode = 'flat';
+  currentFilter = 'all';
+  currentSearch = '';
+
+  document.getElementById('statsBar').classList.remove('visible');
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('loaded'));
+  document.getElementById('toolbar').style.display = 'none';
+  document.getElementById('filePanel').classList.remove('visible');
+  document.getElementById('progressPanel').classList.remove('visible');
+  document.getElementById('logPanel').classList.remove('visible');
+  document.getElementById('bottomBar').classList.remove('visible');
+  document.getElementById('searchInput').value = '';
+  document.getElementById('filterType').value = 'all';
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('logBody').innerHTML = '';
+  fileInput.value = '';
+
+  toast('🔄', 'Reset — ready for a new file');
+}
+
+/* ── Helpers ── */
+function fmtSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const units = ['B','KB','MB','GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ── Init log ── */
+log('info', 'ZipForge ready. Drop a ZIP file to begin.');
+</script>
+</body>
+</html>
